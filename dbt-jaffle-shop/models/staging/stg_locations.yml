@@ -1,12 +1,22 @@
 models:
   - name: stg_locations
-    description: List of open locations with basic cleaning and transformation applied, one row per location.
+    description: List of open locations with basic cleaning and transformation applied, including geographic coordinates, one row per location.
     columns:
       - name: location_id
         description: The unique key for each location.
         data_tests:
           - not_null
           - unique
+      - name: location_name
+        description: The name of the location.
+      - name: tax_rate
+        description: The tax rate for the location.
+      - name: latitude
+        description: The latitude coordinate of the location.
+      - name: longitude
+        description: The longitude coordinate of the location.
+      - name: opened_date
+        description: The date the location was opened, truncated from timestamp.
 
 unit_tests:
   - name: test_does_location_opened_at_trunc_to_date
@@ -27,17 +37,35 @@ unit_tests:
               tax_rate: 0.1,
               opened_at: "2079-10-27T23:59:59.9999",
             }
+      - input: source('ecom', 'raw_longlat')
+        rows:
+          - {
+              id: 1,
+              city: "Vice City",
+              latitude: 25.7617,
+              longitude: -80.1918,
+            }
+          - {
+              id: 2,
+              city: "San Andreas",
+              latitude: 34.0522,
+              longitude: -118.2437,
+            }
     expect:
       rows:
         - {
             location_id: 1,
             location_name: "Vice City",
             tax_rate: 0.2,
+            latitude: 25.7617,
+            longitude: -80.1918,
             opened_date: "2016-09-01",
           }
         - {
             location_id: 2,
             location_name: "San Andreas",
             tax_rate: 0.1,
+            latitude: 34.0522,
+            longitude: -118.2437,
             opened_date: "2079-10-27",
           }

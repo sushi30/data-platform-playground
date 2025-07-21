@@ -6,23 +6,32 @@ source as (
 
 ),
 
+longlat as (
+
+    select * from {{ source('ecom', 'raw_longlat') }}
+
+),
+
 renamed as (
 
     select
 
         ----------  ids
-        id as location_id,
+        s.id as location_id,
 
         ---------- text
-        name as location_name,
+        s.name as location_name,
 
         ---------- numerics
-        tax_rate,
+        s.tax_rate,
+        ll.latitude,
+        ll.longitude,
 
         ---------- timestamps
-        {{ dbt.date_trunc('day', 'opened_at') }} as opened_date
+        {{ dbt.date_trunc('day', 's.opened_at') }} as opened_date
 
-    from source
+    from source s
+    left join longlat ll on s.name = ll.city
 
 )
 

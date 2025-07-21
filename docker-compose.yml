@@ -21,6 +21,7 @@ services:
       timeout: 10s
       retries: 10
 
+  # dbt service that runs one-off commands.
   dbt:
     build:
       context: ./dbt-jaffle-shop
@@ -28,12 +29,16 @@ services:
     container_name: dbt-jaffle-shop
     depends_on:
       - postgres
+      - kafka
     networks:
       - openmetadata_network
     environment:
-      DBT_PROFILES_DIR: /app/profiles
+      - DBT_PROFILES_DIR=/app/profiles
+      - OPENLINEAGE_CONFIG=/app/openlineage.yml
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     volumes:
       - ./dbt-jaffle-shop:/app
+      - ./dbt-jaffle-shop/openlineage.yml:/app/openlineage.yml
 
   redis:
     image: redis:7-alpine
@@ -154,6 +159,8 @@ services:
         condition: service_started
       elasticsearch:
         condition: service_started
+      kafka:
+        condition: service_started
     environment:
       AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -196,6 +203,8 @@ services:
         condition: service_healthy
       openmetadata-migrate:
         condition: service_completed_successfully
+      kafka:
+        condition: service_started
     ports:
       - "8585:8585"
       - "8586:8586"
@@ -242,6 +251,10 @@ services:
       - PIPELINE_SERVICE_CLIENT_HEALTH_CHECK_INTERVAL=300
       - PIPELINE_SERVICE_CLIENT_VERIFY_SSL=no-ssl
       - PIPELINE_SERVICE_CLIENT_SSL_CERT_PATH=""
+      
+      # Kafka Configuration for OpenLineage
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - OPENLINEAGE_KAFKA_TOPIC=openlineage.events
     volumes:
       - ./openmetadata/conf:/opt/openmetadata/rsa
       # DBT artifacts

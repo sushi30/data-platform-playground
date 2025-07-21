@@ -1,0 +1,7 @@
+transport:
+  type: kafka
+  topic: openlineage.events
+  config:
+    bootstrap.servers: kafka:29092
+    acks: all
+    retries: 3

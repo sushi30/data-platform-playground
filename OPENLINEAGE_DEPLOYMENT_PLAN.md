@@ -94,9 +94,9 @@ mkdir -p dbt-jaffle-shop/lineage
 ```
 
 **Success Criteria**:
-- [ ] Directory `kafka/` exists for Kafka broker configuration
-- [ ] Directory `dbt-jaffle-shop/lineage/` exists for OpenLineage config
-- [ ] Directories have proper write permissions for containers
+- [x] Directory `kafka/` exists for Kafka broker configuration
+- [x] Directory `dbt-jaffle-shop/lineage/` exists for OpenLineage config
+- [x] Directories have proper write permissions for containers
 
 ### Step 1.2: Add Kafka Service
 **Task**: Add Kafka and Zookeeper services to docker-compose.yml
@@ -105,10 +105,10 @@ mkdir -p dbt-jaffle-shop/lineage
 - Configure Kafka topics for lineage data
 
 **Success Criteria**:
-- [ ] Zookeeper service added to docker-compose.yml
-- [ ] Kafka broker service added to docker-compose.yml
-- [ ] Kafka accessible at `kafka:9092` for internal services
-- [ ] Kafka UI accessible at `localhost:9021` for monitoring
+- [x] Zookeeper service added to docer-compose.yml
+- [x] Kafka broker service added to docker-compose.yml
+- [x] Kafka accessible at `kafka:9092` for internal services
+- [x] Kafka UI accessible at `localhost:9021` for monitoring
 
 ### Step 1.3: Create OpenLineage Configuration Files
 **Task**: Create configuration files for Kafka transport
@@ -123,8 +123,6 @@ config:
   acks: all
   retries: 3
   compression_type: gzip
-  schema_registry:
-    url: http://schema-registry:8081
 ```
 
 **Kafka Topics Configuration (`kafka/setup-topics.sh`)**:
@@ -132,7 +130,7 @@ config:
 #!/bin/bash
 # Create OpenLineage topic
 kafka-topics --create \
-  --bootstrap-server kafka:9092 \
+  --bootstrap-server kafka:29092 \
   --topic openlineage.events \
   --partitions 3 \
   --replication-factor 1 \
@@ -140,10 +138,9 @@ kafka-topics --create \
 ```
 
 **Success Criteria**:
-- [ ] dbt OpenLineage config uses Kafka transport
-- [ ] Kafka topic for OpenLineage events created
-- [ ] Schema registry configured for event validation
-- [ ] Topic retention configured for 7 days
+- [x] dbt OpenLineage config uses Kafka transport
+- [x] Kafka topic for OpenLineage events created
+- [x] Topic retention configured for 7 days
 
 ---
 
@@ -212,9 +209,9 @@ volumes:
 ```
 
 **Success Criteria**:
-- [ ] Zookeeper service added with persistent storage
-- [ ] Kafka broker service added with external and internal listeners
-- [ ] Kafka UI added for monitoring and debugging
+- [x] Zookeeper service added with persistent storage
+- [x] Kafka broker service added with external and internal listeners
+- [x] Kafka UI added for monitoring and debugging
 - [ ] Health checks configured and passing
 - [ ] All services use openmetadata_network
 
@@ -247,21 +244,21 @@ depends_on:
 ```
 
 **Success Criteria**:
-- [ ] `OPENLINEAGE_CONFIG` environment variable set in dbt container
-- [ ] OpenLineage config file mounted in dbt container
-- [ ] dbt can reach Kafka at `kafka:29092`
-- [ ] dbt service depends on Kafka service
-- [ ] No breaking changes to existing dbt functionality
+- [x] `OPENLINEAGE_CONFIG` environment variable set in dbt container
+- [x] OpenLineage config file mounted in dbt container
+- [x] dbt can reach Kafka at `kafka:29092`
+- [x] dbt service depends on Kafka service
+- [x] No breaking changes to existing dbt functionality
 
 ### Step 2.3: Test OpenLineage Kafka Integration
 **Task**: Verify dbt can send events to Kafka topic
 ```bash
 # Test Kafka broker health
-docker exec kafka kafka-topics --bootstrap-server kafka:9092 --list
+docker exec kafka kafka-topics --bootstrap-server kafka:29092 --list
 
 # Create OpenLineage topic
 docker exec kafka kafka-topics --create \
-  --bootstrap-server kafka:9092 \
+  --bootstrap-server kafka:29092 \
   --topic openlineage.events \
   --partitions 3 \
   --replication-factor 1
@@ -271,18 +268,18 @@ dbt run --select stg_customers
 
 # Check Kafka topic for OpenLineage events
 docker exec kafka kafka-console-consumer \
-  --bootstrap-server kafka:9092 \
+  --bootstrap-server kafka:29092 \
   --topic openlineage.events \
   --from-beginning --max-messages 5
 ```
 
 **Success Criteria**:
-- [ ] Kafka broker responds to topic listing
-- [ ] OpenLineage topic created successfully
-- [ ] dbt run completes successfully
-- [ ] OpenLineage events sent to Kafka topic
-- [ ] Events visible in Kafka consumer output
-- [ ] No Kafka connection errors
+- [z] Kafka broker responds to topic listing
+- [z] OpenLineage topic created successfully
+- [z] dbt run completes successfully
+- [z] OpenLineage events sent to Kafka topic
+- [z] Events visible in Kafka consumer output
+- [z] No Kafka connection errors
 
 ---
 
@@ -337,7 +334,7 @@ dbt seed && dbt run && dbt test
 
 # Monitor Kafka topic for lineage events
 docker exec kafka kafka-console-consumer \
-  --bootstrap-server kafka:9092 \
+  --bootstrap-server kafka:29092 \
   --topic openlineage.events \
   --from-beginning | jq '.'
 ```
@@ -355,12 +352,12 @@ docker exec kafka kafka-console-consumer \
 ```bash
 # Check Kafka topic metrics
 docker exec kafka kafka-run-class kafka.tools.GetOffsetShell \
-  --broker-list kafka:9092 \
+  --broker-list kafka:29092 \
   --topic openlineage.events
 
 # Sample lineage events from topic
 docker exec kafka kafka-console-consumer \
-  --bootstrap-server kafka:9092 \
+  --bootstrap-server kafka:29092 \
   --topic openlineage.events \
   --max-messages 10 | jq '.eventType'
 ```
@@ -393,7 +390,6 @@ Connection Config:
     Bootstrap Servers: kafka:9092
     Topic Name: openlineage.events
     Consumer Group: openmetadata-lineage-consumer
-    Schema Registry URL: (optional)
 ```
 
 3. Create **Ingestion Pipeline**:
@@ -449,7 +445,7 @@ open http://localhost:8585
 dbt run --select stg_customers
 # Check Kafka topic for new events
 docker exec kafka kafka-console-consumer \
-  --bootstrap-server kafka:9092 \
+  --bootstrap-server kafka:29092 \
   --topic openlineage.events \
   --max-messages 5 | grep -i stg_customers
 
@@ -485,10 +481,10 @@ kafka-start:
 	@echo "Starting Kafka ecosystem..."
 	docker compose up -d zookeeper kafka kafka-ui
 	@echo "Waiting for Kafka to be ready..."
-	@until docker exec kafka kafka-topics --bootstrap-server kafka:9092 --list > /dev/null 2>&1; do sleep 2; done
+	@until docker exec kafka kafka-topics --bootstrap-server kafka:29092 --list > /dev/null 2>&1; do sleep 2; done
 	@echo "Creating OpenLineage topic..."
 	docker exec kafka kafka-topics --create --if-not-exists \
-		--bootstrap-server kafka:9092 \
+		--bootstrap-server kafka:29092 \
 		--topic openlineage.events \
 		--partitions 3 --replication-factor 1
 	@echo "Kafka ready for OpenLineage!"
@@ -504,7 +500,7 @@ dbt-run-with-lineage: kafka-start
 	docker exec dbt-jaffle-shop dbt run
 	@echo "Checking lineage events in Kafka..."
 	docker exec kafka kafka-console-consumer \
-		--bootstrap-server kafka:9092 \
+		--bootstrap-server kafka:29092 \
 		--topic openlineage.events \
 		--max-messages 5 --timeout-ms 5000
 

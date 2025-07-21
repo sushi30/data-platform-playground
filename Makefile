@@ -9,11 +9,11 @@ postgres:
 # dbt Commands
 # Install dbt dependencies and seed sample data from CSV files
 dbt-seed:
-	docker compose run --rm dbt dbt seed --full-refresh --vars '{"load_source_data": true}'
+	docker compose run --rm dbt dbt-ol seed --full-refresh --vars '{"load_source_data": true}'
 
 # Build and test the complete dbt project (recommended for full workflow)
 dbt-build:
-	docker compose run --rm dbt dbt build
+	docker compose run --rm dbt dbt-ol build
 
 # Run dbt models only (without tests)
 dbt-run:
