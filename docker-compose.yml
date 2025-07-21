@@ -1,0 +1,267 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - openmetadata_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmetadata -d openmetadata"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  dbt:
+    build:
+      context: ./dbt-jaffle-shop
+      dockerfile: Dockerfile
+    container_name: dbt-jaffle-shop
+    depends_on:
+      - postgres
+    networks:
+      - openmetadata_network
+    environment:
+      DBT_PROFILES_DIR: /app/profiles
+    volumes:
+      - ./dbt-jaffle-shop:/app
+
+  redis:
+    image: redis:7-alpine
+    container_name: superset-redis
+    networks:
+      - openmetadata_network
+    volumes:
+      - redis_data:/data
+
+  superset:
+    image: apachesuperset.docker.scarf.sh/apache/superset:latest-dev
+    container_name: superset
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8088:8088"
+    networks:
+      - openmetadata_network
+    environment:
+      - SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py
+      - SUPERSET_SECRET_KEY=your-secret-key-change-this-in-production
+      - DATABASE_DB=superset_db
+      - DATABASE_HOST=postgres
+      - DATABASE_PASSWORD=superset_password
+      - DATABASE_USER=superset_user
+      - DATABASE_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./superset:/app/pythonpath
+      - superset_home:/app/superset_home
+    command: >
+      bash -c "
+        superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin &&
+        superset db upgrade &&
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger
+      "
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
+    container_name: openmetadata-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1024m -Xmx1024m
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    networks:
+      - openmetadata_network
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: "curl -s http://localhost:9200/_cluster/health?pretty | grep status | grep -qE 'green|yellow' || exit 1"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  openmetadata-migrate:
+    image: openmetadata/server:1.8.3
+    container_name: openmetadata-migrate
+    depends_on:
+      postgres:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - openmetadata_network
+    environment:
+      # Database Configuration
+      - DB_DRIVER_CLASS=org.postgresql.Driver
+      - DB_SCHEME=postgresql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=openmetadata_user
+      - DB_USER_PASSWORD=openmetadata_password
+      - OM_DATABASE=openmetadata_db
+      
+      # ElasticSearch Configuration
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
+      - ELASTICSEARCH_USERNAME=""
+      - ELASTICSEARCH_PASSWORD=""
+      
+      # OpenMetadata Configuration
+      - SERVER_HOST_API_URL=http://openmetadata-server:8585/api
+      - SERVER_WEB_URL=http://localhost:8585
+      - AUTHORIZER_CLASS_NAME=org.openmetadata.service.security.DefaultAuthorizer
+      - AUTHORIZER_REQUEST_FILTER=org.openmetadata.service.security.JwtFilter
+      - AUTHORIZER_ADMIN_PRINCIPALS=[admin]
+      - AUTHORIZER_PRINCIPAL_DOMAIN=open-metadata.org
+      - AUTHENTICATION_PROVIDER=basic
+      - AUTHENTICATION_PUBLIC_KEYS=[http://localhost:8585/api/v1/system/config/jwks]
+      - AUTHENTICATION_AUTHORITY=https://accounts.google.com
+      - AUTHENTICATION_CLIENT_ID=""
+      - AUTHENTICATION_CALLBACK_URL=""
+      
+      # JWT Configuration
+      - RSA_PUBLIC_KEY_FILE_PATH=/rsa/public_key.der
+      - RSA_PRIVATE_KEY_FILE_PATH=./rsa/private_key.der
+      - JWT_ISSUER=open-metadata.org
+      - JWT_KEY_ID=Gb389a-9f76-gdjs-a92j-0242bk94356
+    volumes:
+      - ./openmetadata/conf:/opt/openmetadata/rsa
+    command: ["./bootstrap/openmetadata-ops.sh", "migrate"]
+
+
+  # OpenMetadata Ingestion
+  openmetadata-ingestion:
+    container_name: openmetadata_ingestion
+    image: docker.getcollate.io/openmetadata/ingestion:1.8.3
+    depends_on:
+      postgres:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
+    environment:
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__OPENMETADATA_AIRFLOW_APIS__DAG_GENERATED_CONFIGS: "/opt/airflow/dag_generated_configs"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      AIRFLOW_DB: airflow_db
+      DB_USER: airflow_user
+      DB_SCHEME: postgresql+psycopg2
+      DB_PASSWORD: airflow_password
+      DB_PROPERTIES: ""
+      # To test the lineage backend
+      # AIRFLOW__LINEAGE__BACKEND: airflow_provider_openmetadata.lineage.backend.OpenMetadataLineageBackend
+      # AIRFLOW__LINEAGE__AIRFLOW_SERVICE_NAME: local_airflow
+      # AIRFLOW__LINEAGE__OPENMETADATA_API_ENDPOINT: http://openmetadata-server:8585/api
+      # AIRFLOW__LINEAGE__JWT_TOKEN: ...
+    entrypoint: /bin/bash
+    command:
+      - "/opt/airflow/ingestion_dependency.sh"
+    expose:
+      - 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - openmetadata_network
+    volumes:
+      - ingestion-volume-dag-airflow:/opt/airflow/dag_generated_configs
+      - ingestion-volume-dags:/opt/airflow/dags
+      - ingestion-volume-tmp:/tmp\
+      # DBT artifcats
+      - ./dbt-jaffle-shop/target:/dbt/artifacts
+
+  openmetadata-server:
+    image: openmetadata/server:1.8.3
+    container_name: openmetadata-server
+    depends_on:
+      postgres:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+      openmetadata-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8585:8585"
+      - "8586:8586"
+    networks:
+      - openmetadata_network
+    environment:
+      # Database Configuration
+      - DB_DRIVER_CLASS=org.postgresql.Driver
+      - DB_SCHEME=postgresql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=openmetadata_user
+      - DB_USER_PASSWORD=openmetadata_password
+      - OM_DATABASE=openmetadata_db
+      
+      # ElasticSearch Configuration
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
+      - ELASTICSEARCH_USERNAME=""
+      - ELASTICSEARCH_PASSWORD=""
+      
+      # OpenMetadata Configuration
+      - SERVER_HOST_API_URL=http://openmetadata-server:8585/api
+      - SERVER_WEB_URL=http://localhost:8585
+      - AUTHORIZER_CLASS_NAME=org.openmetadata.service.security.DefaultAuthorizer
+      - AUTHORIZER_REQUEST_FILTER=org.openmetadata.service.security.JwtFilter
+      - AUTHORIZER_ADMIN_PRINCIPALS=[admin]
+      - AUTHORIZER_PRINCIPAL_DOMAIN=open-metadata.org
+      - AUTHENTICATION_PROVIDER=basic
+      - AUTHENTICATION_PUBLIC_KEYS=[http://localhost:8585/api/v1/system/config/jwks]
+      - AUTHENTICATION_AUTHORITY=https://accounts.google.com
+      - AUTHENTICATION_CLIENT_ID=""
+      - AUTHENTICATION_CALLBACK_URL=""
+      
+      # JWT Configuration
+      - RSA_PUBLIC_KEY_FILE_PATH=./rsa/public_key.der
+      - RSA_PRIVATE_KEY_FILE_PATH=./rsa/private_key.der
+      - JWT_ISSUER=open-metadata.org
+      - JWT_KEY_ID=Gb389a-9f76-gdjs-a92j-0242bk94356
+      
+      # Pipeline Service Configuration (Airflow)
+      - PIPELINE_SERVICE_CLIENT_ENDPOINT=http://openmetadata-ingestion:8080
+      - PIPELINE_SERVICE_CLIENT_HEALTH_CHECK_INTERVAL=300
+      - PIPELINE_SERVICE_CLIENT_VERIFY_SSL=no-ssl
+      - PIPELINE_SERVICE_CLIENT_SSL_CERT_PATH=""
+    volumes:
+      - ./openmetadata/conf:/opt/openmetadata/rsa
+      # DBT artifacts
+      - ./dbt-jaffle-shop/target:/dbt/artifacts
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8586/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  postgres_superset_data:
+  redis_data:
+  superset_home:
+  es_data:
+  ingestion-volume-dag-airflow:
+  ingestion-volume-dags:
+  ingestion-volume-tmp:
+
+networks:
+  openmetadata_network:
+    driver: bridge

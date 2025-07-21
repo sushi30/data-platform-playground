@@ -1,0 +1,70 @@
+# OpenMetadata Server Configuration
+
+server:
+  rootPath: '/api/*'
+  applicationConnectors:
+    - type: http
+      port: 8585
+  adminConnectors:
+    - type: http
+      port: 8586
+
+# Database Configuration
+database:
+  driverClass: org.postgresql.Driver
+  user: ${DB_USER:-openmetadata}
+  password: ${DB_USER_PASSWORD:-openmetadata}
+  url: jdbc:${DB_SCHEME:-postgresql}://${DB_HOST:-postgres}:${DB_PORT:-5432}/${OM_DATABASE:-openmetadata_db}
+
+# Migration Configuration
+migrationConfiguration:
+  flywayLocations:
+    - classpath:db/migration/postgres
+
+# Elasticsearch Configuration
+elasticsearch:
+  host: ${ELASTICSEARCH_HOST:-elasticsearch}
+  port: ${ELASTICSEARCH_PORT:-9200}
+  scheme: ${ELASTICSEARCH_SCHEME:-http}
+  username: ${ELASTICSEARCH_USERNAME:-""}
+  password: ${ELASTICSEARCH_PASSWORD:-""}
+
+# Authentication Configuration
+authenticationConfiguration:
+  provider: ${AUTHENTICATION_PROVIDER:-basic}
+  publicKeyUrls: ${AUTHENTICATION_PUBLIC_KEYS:-[{http://localhost:8585/api/v1/system/config/jwks}]}
+  authority: ${AUTHENTICATION_AUTHORITY:-https://accounts.google.com}
+  clientId: ${AUTHENTICATION_CLIENT_ID:-""}
+  callbackUrl: ${AUTHENTICATION_CALLBACK_URL:-""}
+
+# Authorization Configuration
+authorizerConfiguration:
+  className: ${AUTHORIZER_CLASS_NAME:-org.openmetadata.service.security.DefaultAuthorizer}
+  containerRequestFilter: ${AUTHORIZER_REQUEST_FILTER:-org.openmetadata.service.security.JwtFilter}
+  adminPrincipals: ${AUTHORIZER_ADMIN_PRINCIPALS:-[admin]}
+  principalDomain: ${AUTHORIZER_PRINCIPAL_DOMAIN:-open-metadata.org}
+
+# JWT Configuration
+jwtTokenConfiguration:
+  rsapublicKeyFilePath: ${RSA_PUBLIC_KEY_FILE_PATH:-./conf/public_key.der}
+  rsaprivateKeyFilePath: ${RSA_PRIVATE_KEY_FILE_PATH:-./conf/private_key.der}
+  jwtissuer: ${JWT_ISSUER:-open-metadata.org}
+  keyId: ${JWT_KEY_ID:-Gb389a-9f76-gdjs-a92j-0242bk94356}
+
+# Logging Configuration
+logging:
+  level: INFO
+  loggers:
+    org.openmetadata: DEBUG
+    root: INFO
+
+# Health Check Configuration
+health:
+  delayedShutdownHandlerEnabled: true
+  shutdownWaitPeriod: 1s
+  healthCheckUrlPaths: ["/api/v1/health-check"]
+
+# Web Configuration
+web:
+  uriPath: ${SERVER_HOST_API_URL:-http://localhost:8585/api}
+  webUrl: ${SERVER_WEB_URL:-http://localhost:8585}

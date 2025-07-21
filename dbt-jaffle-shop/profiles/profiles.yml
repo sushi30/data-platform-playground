@@ -1,0 +1,27 @@
+jaffle_shop:
+  outputs:
+    dev:
+      type: postgres
+      host: postgres
+      user: dbt_user
+      password: dbt_password
+      port: 5432
+      dbname: jaffle_db
+      schema: jaffle_shop_dev
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 1
+    prod:
+      type: postgres
+      host: postgres
+      user: dbt_user
+      password: dbt_password
+      port: 5432
+      dbname: dbt_db
+      schema: jaffle_db
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 1
+  target: dev
