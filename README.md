@@ -11,88 +11,101 @@ This project demonstrates integration between OpenMetadata and dbt using the Jaf
 
 ### Quick Start
 
-1. **Start PostgreSQL database:**
+1. **Deploy the docker stack**
    ```bash
-   make postgres
+   make stack-up
+   ```
+   
+   This will deploy the following components:
+   1. **PostgreSQL** → Raw data storage
+   2. **dbt** → Data transformation and modeling  
+   3. **Kafka** → Real-time lineage event streaming (via OpenLineage)
+   4. **Superset** → Business intelligence and dashboards
+   5. **OpenMetadata** → Data catalog, lineage, and governance
+
+2. **Run DBT trasnformations**
+   ```bash
+   make dbt-seed dbt-build
    ```
 
-2. **Seed the dbt project with sample data:**
-   ```bash
-   make dbt-seed
-   ```
+3. Go to the [kafka UI](http://localhost:9021/ui/clusters/openlineage/all-topics/openlineage.events/messages?keySerde=String&valueSerde=String&limit=100) to see the events.
 
-3. **Run the dbt project:**
-   ```bash
-   make dbt-build-project
-   ```
+#### Setting Up OpenMetadata
 
-4. **Start Superset for dashboards:**
-   ```bash
-   make superset
-   ```
+After starting the stack, follow these steps to configure OpenMetadata:
 
-5. **Start OpenMetadata for data lineage:**
-   ```bash
-   make openmetadata-migrate  # Run database migrations first
-   make openmetadata          # Start the server
-   ```
+1. **Access OpenMetadata:**
+   - URL: http://localhost:8585
+   - Username: `admin@open-metadata.org`
+   - Password: `admin`
 
-### Available Commands
+2. **Add PostgreSQL Database Connection:**
+   - Go to **Settings** > **Services** > **Databases** or [this link](http://localhost:8585/databaseServices/add-service)
+   - Click **Add New Service**
+   - Select **PostgreSQL** as the database type
+   - Fill in the connection details:
+     ```
+     Service Name: postgres-jaffle-shop
+     Username: dbt_user
+     Password: dbt_password
+     HostPort: postgres:5432
+     Database: jaffle_db
+     ```
+   - Click **Test Connection** and then **Save**
 
-All available commands are documented in the `Makefile`. Run `make` followed by any of these targets:
+   **Note**: We connect to the `jaffle_db` database using `dbt_user` credentials because this is where dbt creates the transformed data models that we want to catalog in OpenMetadata.
 
-**Quick Reference:**
-- `make stack-up` - Start the complete stack (includes OpenMetadata migration)
-- `make dbt-seed` - Load sample data
-- `make dbt-build-project` - Build dbt models and run tests
-- `make superset` - Start Superset dashboards
-- `make openmetadata-migrate` - Run OpenMetadata database migrations
-- `make openmetadata` - Start OpenMetadata server
-- `make stack-down` - Stop all services
+   Wait a few minutes for the database to be loaded into OpenMetadata,
 
-For detailed descriptions of each command, see the comments in the `Makefile`.
+3. **Configure OpenLineage Connector:**
+   - Go to **Settings** > **Services** > **Pipelines** or [this link](http://localhost:8585/pipelineServices/add-service)
+   - Click **Add New Service** 
+   - Select **OpenLineage** as the service type
+   - Fill in the connection details:
+     ```
+     Service Name: dbt-openlineage-kafka
+     Kafka Brokers: kafka:29092
+     Topic: openlineage.events
+     Consumer Group: start
+     ```
+   - Click **Test Connection** and then **Save**. 
+   - After saving, edit the pipeline and set:
+      ```
+      DB Service Names: postgres-jaffle-shop
+      ```
+   - Change the consumer group to `openmetadata-lineage-consumer` and click **Save**.
 
-### Docker Services
+   Wait a few minutes for the OpenLineage service to start consuming events from Kafka.
 
-- **postgres**: PostgreSQL database for storing dbt data and models
-- **postgres-superset**: Separate PostgreSQL database for Superset metadata
-- **redis**: Redis cache for Superset
-- **elasticsearch**: Elasticsearch for OpenMetadata search and indexing
-- **zookeeper**: Zookeeper coordination service for Kafka
-- **kafka**: Kafka message broker for OpenLineage events
-- **kafka-ui**: Kafka UI for monitoring topics and messages
-- **superset**: Apache Superset for dashboards and visualization
-- **openmetadata-migrate**: One-time migration service for OpenMetadata database setup
-- **openmetadata-server**: OpenMetadata server for data catalog and lineage
-- **openmetadata-ingestion**: OpenMetadata ingestion service for pipeline processing
-- **dbt**: dbt Docker container for running dbt commands with OpenLineage (one-off service, not persistent)
+4. **Ingest lineage via DBT***
+   1. Repeat step (2) but name the service `dbt-jaffle-shop-dbt-lineage` and use the same PostgreSQL connection details.
+   2. Go to **Settings** > **Services** > **Databases** > `dbt-jaffle-shop-dbt-lineage` >> **agents** or [this link](http://localhost:8585/service/databaseServices/postgres-jaffle-shop-dbt/agents/metadata?currentPage=1)
+   3. Click **Add Agent** > **Add dbt Agent**
+   4. Fill in the details:
+      ```
+      DBT Configuration Source: DBT Local Config
+      DBT Manifest File Path: /dbt/artifacts/manifest.json
+      DBT Run Results File Path: /dbt/artifacts/run_results.json
+      ```
+   5. Click **Next**.
+   6. Click **Add & Deploy**.
+   7. Run the agent from the agent page by clicking the **Overflow** button and then **Run**.
 
-### Database Schema
+   Wait a few minutes for the dbt agent to process the manifest and run results files, which will populate the dbt models and lineage in OpenMetadata.
+   
+5. **Add Superset Dashboard Service:**
+   - Go to **Settings** > **Services** > **Dashboard** (or [this link](http://localhost:8585/dashboardServices/add-service))
+   - Click **Add New Service**
+   - Select **Superset** as the dashboard type
+   - Fill in the connection details:
+     ```
+     Service Name: superset-dashboards
+     Provider: db
+     Username: admin
+     Password: admin
+     ```
+   - Click **Test Connection** and then **Save**
 
-The dbt project creates the following schemas in PostgreSQL:
-- `jaffle_shop_dev` - Development environment
-- `jaffle_shop_prod` - Production environment (configured but not used by default)
-
-### Project Structure
-
-```
-├── docker-compose.yml          # Docker services configuration
-├── Makefile                   # Automation commands
-├── dbt-jaffle-shop/          # dbt project directory
-│   ├── Dockerfile            # dbt container configuration
-│   ├── profiles/             # dbt profiles configuration
-│   └── ...                   # dbt project files
-├── superset/                 # Superset configuration
-│   └── superset_config.py    # Superset configuration file
-├── openmetadata/             # OpenMetadata configuration
-│   └── conf/                 # OpenMetadata server configuration
-│       ├── openmetadata.yaml # Main configuration file
-│       ├── public_key.der    # JWT public key
-│       └── private_key.der   # JWT private key
-└── postgres/                 # PostgreSQL initialization scripts
-    └── init/
-        └── 01-init.sql
-```
 
 ## Usage
 
@@ -115,7 +128,9 @@ The dbt project creates the following schemas in PostgreSQL:
 
 4. **Access the services:**
    - **Superset**: http://localhost:8088 (admin/admin)
-   - **OpenMetadata**: http://localhost:8585 (admin/admin)
+   - **OpenMetadata**: http://localhost:8585 (admin@open-metadata.org/admin)
+   - **Kafka UI**: http://localhost:9021
+   - **Airflow**: http://localhost:8080 (admin/admin)
 
 5. **Set up data connections in both services as described in their respective configuration sections**
 
@@ -135,92 +150,6 @@ The pipeline flow: Raw Data → dbt Transformations → Analytics Tables → Sup
 
 OpenMetadata provides data catalog, lineage tracking, and data governance capabilities. Here's how to set it up:
 
-#### Setting Up OpenMetadata
-
-After starting the stack, follow these steps to configure OpenMetadata:
-
-1. **Access OpenMetadata:**
-   - URL: http://localhost:8585
-   - Username: `admin`
-   - Password: `admin`
-
-2. **Add PostgreSQL Database Connection:**
-   - Go to **Settings** > **Services** > **Databases**
-   - Click **Add New Service**
-   - Select **PostgreSQL** as the database type
-   - Fill in the connection details:
-     ```
-     Service Name: postgres-jaffle-shop
-     Host: postgres
-     Port: 5432
-     Database: jaffle_db
-     Username: dbt_user
-     Password: dbt_password
-     ```
-   - Click **Test Connection** and then **Save**
-
-   **Note**: We connect to the `jaffle_db` database using `dbt_user` credentials because this is where dbt creates the transformed data models that we want to catalog in OpenMetadata.
-
-3. **Configure PostgreSQL Data Ingestion:**
-   - After creating the PostgreSQL service, click on it from the Services list
-   - Click **Add Ingestion** 
-   - Select **Metadata Ingestion**
-   - Configure the ingestion settings:
-     ```
-     Name: postgres-jaffle-shop-metadata
-     Schema Filter Pattern: 
-       - Include: jaffle_shop_dev
-     Table Filter Pattern: 
-       - Include: .*
-     ```
-   - Set the schedule (e.g., daily at 2 AM): `0 2 * * *`
-   - Click **Deploy** to create the ingestion pipeline
-
-4. **Run the Initial Ingestion:**
-   - Go to **Services** > **Ingestions**
-   - Find your `postgres-jaffle-shop-metadata` pipeline
-   - Click **Run** to execute the initial metadata ingestion
-   - Monitor the progress in the **Activity** tab
-   - Once complete, you should see all dbt models (customers, orders, order_items, products, locations) in the catalog
-
-5. **Add Superset Dashboard Service:**
-   - Go to **Settings** > **Services** > **Dashboard**
-   - Click **Add New Service**
-   - Select **Superset** as the dashboard type
-   - Fill in the connection details:
-     ```
-     Service Name: superset-dashboards
-     Host: http://superset:8088
-     Username: admin
-     Password: admin
-     ```
-   - Click **Test Connection** and then **Save**
-
-6. **View Data Lineage:**
-   - Navigate to **Explore** > **Tables**
-   - Select any table from the `jaffle_shop_dev` schema
-   - Click on the **Lineage** tab to see data flow and transformations
-   - The lineage will show how dbt models transform raw data into final tables
-
-7. **Connect dbt Lineage (Advanced):**
-   To get full dbt lineage in OpenMetadata:
-   - Configure dbt to generate `manifest.json` files
-   - Use OpenMetadata's dbt integration to import model lineage
-   - This will show the complete data transformation pipeline
-
-8. **Add OpenLineage Connector for Real-time Lineage:**
-   To capture real-time lineage from dbt via Kafka:
-   - Go to: http://localhost:8585/pipelineServices/add-service
-   - Select **OpenLineage** as the service type
-   - Fill in the connection details:
-     ```
-     Service Name: dbt-openlineage-kafka
-     Kafka Brokers: kafka:29092
-     Topic: openlineage.events
-     Consumer Group: openmetadata-lineage-consumer
-     ```
-   - Click **Test Connection** and then **Save**
-   - This will enable OpenMetadata to consume real-time lineage events from Kafka when dbt runs with OpenLineage
 
 ### Superset Configuration
 

@@ -1,5 +1,8 @@
 models:
   - name: order_items
+    description: |
+      Order items are the individual items that make up an order. Each order can have multiple items, and each item is associated with a product.
+      The grain of the table is one row per order item.
     columns:
       - name: order_item_id
         data_tests:
