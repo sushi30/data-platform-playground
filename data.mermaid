@@ -1,0 +1,31 @@
+graph TD
+    subgraph Domain A
+        A[Data Product 1 - Sales Analytics] --> B(Team A Data Producers)
+        B --> C{Data Product Interface A}
+    end
+
+    subgraph Domain B
+        D[Data Product 2 - Customer Behavior] --> E(Team B Data Producers)
+        E --> F{Data Product Interface B}
+    end
+hh
+    subgraph Domain C
+        G[Data Product 3 - Inventory Management] --> H(Team C Data Producers)
+        H --> I{Data Product Interface C}
+    end
+
+    subgraph Data Platform Team
+        J[Self-Serve Data Platform]
+        K[Observability & Governance]
+    end
+
+    subgraph Data Consumers
+        L[Analyst Team X]
+        M[Application Y]
+        N[Data Scientist Z]
+    end
+
+    C -- "Discoverable, Addressable, Trustworthy" --> L
+    C -- "Discoverable, Addressable, Trustworthy" --> M
+    F -- "Discoverable, Addressable, Trustworthy" --> L
+    F -- "Discoverable, Addressable, Trustworthy" --> N

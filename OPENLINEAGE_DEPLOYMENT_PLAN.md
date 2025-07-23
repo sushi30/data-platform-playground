@@ -340,12 +340,12 @@ docker exec kafka kafka-console-consumer \
 ```
 
 **Success Criteria**:
-- [ ] All dbt commands execute successfully
-- [ ] OpenLineage events sent to Kafka for each operation
-- [ ] Kafka topic receives complete lineage events
-- [ ] Seed → staging → marts relationships captured
-- [ ] Column-level lineage included where applicable
-- [ ] Test results and data quality events captured
+- [x] All dbt commands execute successfully
+- [x] OpenLineage events sent to Kafka for each operation
+- [x] Kafka topic receives complete lineage events
+- [x] Seed → staging → marts relationships captured
+- [x] Column-level lineage included where applicable
+- [x] Test results and data quality events captured
 
 ### Step 3.3: Validate Lineage Data Quality in Kafka
 **Task**: Verify collected lineage data completeness and accuracy in Kafka topic

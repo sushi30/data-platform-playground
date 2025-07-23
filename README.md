@@ -58,10 +58,14 @@ For detailed descriptions of each command, see the comments in the `Makefile`.
 - **postgres-superset**: Separate PostgreSQL database for Superset metadata
 - **redis**: Redis cache for Superset
 - **elasticsearch**: Elasticsearch for OpenMetadata search and indexing
+- **zookeeper**: Zookeeper coordination service for Kafka
+- **kafka**: Kafka message broker for OpenLineage events
+- **kafka-ui**: Kafka UI for monitoring topics and messages
 - **superset**: Apache Superset for dashboards and visualization
 - **openmetadata-migrate**: One-time migration service for OpenMetadata database setup
 - **openmetadata-server**: OpenMetadata server for data catalog and lineage
-- **dbt**: dbt Docker container for running dbt commands (one-off service, not persistent)
+- **openmetadata-ingestion**: OpenMetadata ingestion service for pipeline processing
+- **dbt**: dbt Docker container for running dbt commands with OpenLineage (one-off service, not persistent)
 
 ### Database Schema
 
@@ -117,14 +121,15 @@ The dbt project creates the following schemas in PostgreSQL:
 
 ### Data Pipeline Overview
 
-This setup creates a complete modern data stack:
+This setup creates a complete modern data stack with real-time lineage:
 
 1. **PostgreSQL** → Raw data storage
 2. **dbt** → Data transformation and modeling  
-3. **Superset** → Business intelligence and dashboards
-4. **OpenMetadata** → Data catalog, lineage, and governance
+3. **Kafka** → Real-time lineage event streaming (via OpenLineage)
+4. **Superset** → Business intelligence and dashboards
+5. **OpenMetadata** → Data catalog, lineage, and governance
 
-The pipeline flow: Raw Data → dbt Transformations → Analytics Tables → Superset Dashboards + OpenMetadata Lineage
+The pipeline flow: Raw Data → dbt Transformations → Analytics Tables → Superset Dashboards + OpenMetadata Real-time Lineage (via Kafka)
 
 ### OpenMetadata Configuration
 
@@ -202,6 +207,20 @@ After starting the stack, follow these steps to configure OpenMetadata:
    - Configure dbt to generate `manifest.json` files
    - Use OpenMetadata's dbt integration to import model lineage
    - This will show the complete data transformation pipeline
+
+8. **Add OpenLineage Connector for Real-time Lineage:**
+   To capture real-time lineage from dbt via Kafka:
+   - Go to: http://localhost:8585/pipelineServices/add-service
+   - Select **OpenLineage** as the service type
+   - Fill in the connection details:
+     ```
+     Service Name: dbt-openlineage-kafka
+     Kafka Brokers: kafka:29092
+     Topic: openlineage.events
+     Consumer Group: openmetadata-lineage-consumer
+     ```
+   - Click **Test Connection** and then **Save**
+   - This will enable OpenMetadata to consume real-time lineage events from Kafka when dbt runs with OpenLineage
 
 ### Superset Configuration
 
